@@ -1,0 +1,53 @@
+
+from flask import Flask, request, jsonify
+import openai
+import requests
+from twilio.rest import Client
+
+app = Flask(__name__)
+
+# Configure OpenAI and Twilio API keys
+openai.api_key = 'your-openai-api-key'
+account_sid = 'your-twilio-account-sid'
+auth_token = 'your-twilio-auth-token'
+client = Client(account_sid, auth_token)
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    user_message = request.json['message']
+    response = openai.Completion.create(
+        engine="text-davinci-003",
+        prompt=f"User: {user_message}\nAI:",
+        max_tokens=100
+    )
+    ai_message = response.choices[0].text.strip()
+    
+    # Check for favorite color in the message
+    if "favorite color is" in user_message.lower():
+        color = user_message.split("favorite color is")[-1].strip()
+        image_url = generate_wallpaper(color)
+        to = request.json['to']
+        message_sid = send_whatsapp_message(to, image_url)
+        return jsonify({"message": f"Wallpaper generated and sent to {to}. Message SID: {message_sid}"})
+    
+    return jsonify({"message": ai_message})
+
+def generate_wallpaper(color):
+    response = openai.Image.create(
+        prompt=f"Create a creative wallpaper with the color {color}",
+        n=1,
+        size="1024x1024"
+    )
+    image_url = response['data'][0]['url']
+    return image_url
+
+def send_whatsapp_message(to, image_url):
+    message = client.messages.create(
+        body=f"Here is your creative wallpaper: {image_url}",
+        from_='whatsapp:+14155238886',  # Twilio sandbox number
+        to=f'whatsapp:{to}'
+    )
+    return message.sid
+
+if __name__ == '__main__':
+    app.run(debug=True)
